@@ -151,6 +151,7 @@ public class Database {
 
     public void addExercise(String name, String muscleType) throws SQLException {
         String sql = "INSERT INTO exercises (name, muscle_type) VALUES (?, ?)";
+        Connection connection = dataSource.getConnection();
         PreparedStatement statement = connection.prepareStatement(sql);
         statement.setString(1, name);
         statement.setString(2, muscleType);

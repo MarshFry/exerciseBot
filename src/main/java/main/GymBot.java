@@ -5,6 +5,7 @@ import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardRemove;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
@@ -51,7 +52,7 @@ public class GymBot extends TelegramLongPollingBot {
                             database.addExercise(messageText, session.getMuscleType().getTableName());
                         }
                         session.setExercise(messageText);
-                        sendMessage(chatId, "Введите количество повторений и вес (через пробел):");
+                        sendMessageAndRemoveKeyboard(chatId, "Введите количество повторений и вес (через пробел):");
                         session.setState(State.ENTER_REPS_AND_WEIGHT);
                     } catch (SQLException e) {
                         sendMessage(chatId, "Некорректный ввод. Пожалуйста, введите название упражнения или выберите из имеющихся");
@@ -178,6 +179,21 @@ public class GymBot extends TelegramLongPollingBot {
 
     private void sendMessage(long chatId, String text) {
         sendMessage(chatId, text, null);
+    }
+
+    private void sendMessageAndRemoveKeyboard(long chatId, String text) {
+        ReplyKeyboardRemove keyboardRemove = new ReplyKeyboardRemove();
+        keyboardRemove.setRemoveKeyboard(true);
+        keyboardRemove.setSelective(false);
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText(text);
+        message.setReplyMarkup(keyboardRemove);
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            System.out.println(e.getMessage());
+        }
     }
 
     @Override
