@@ -125,9 +125,6 @@ public class Database {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, muscleType.getTableName());
             ResultSet resultSet = statement.executeQuery();
-            if (!resultSet.next()) {
-                return exercises;
-            }
             while (resultSet.next()) {
                 String exercise = resultSet.getString("name");
                 exercises.add(exercise);
@@ -138,15 +135,11 @@ public class Database {
         return exercises;
     }
 
-    public void addExercise(String name, String muscleType) {
+    public void addExercise(String name, String muscleType) throws SQLException {
         String sql = "INSERT INTO exercises (name, muscle_type) VALUES (?, ?)";
-
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setString(1, name);
-            statement.setString(2, muscleType);
-            statement.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        PreparedStatement statement = connection.prepareStatement(sql);
+        statement.setString(1, name);
+        statement.setString(2, muscleType);
+        statement.executeUpdate();
     }
 }

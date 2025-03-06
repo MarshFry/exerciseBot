@@ -1,5 +1,6 @@
 package main;
 
+import org.sqlite.SQLiteException;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -7,6 +8,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMar
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -14,8 +16,8 @@ import java.util.Map;
 
 public class GymBot extends TelegramLongPollingBot {
 
-    private Map<Long, UserSession> userSessions = new HashMap<>();
-    private Database database = new Database();
+    private final Map<Long, UserSession> userSessions = new HashMap<>();
+    private final Database database = new Database();
     EnvListener envListener = new EnvListener();
 
     @Override
@@ -28,38 +30,55 @@ public class GymBot extends TelegramLongPollingBot {
             if (messageText.equals("/start")) {
                 userSessions.remove(chatId);
                 session = new UserSession();
-                session.setState(State.START);
+                session.setState(State.ACTION);
                 userSessions.put(chatId, session);
             }
 
             switch (session.getState()) {
-                case START:
-                    sendMessage(chatId, "Выберите тип мышц:", createMuscleTypeKeyboard());
+                case START_EXERCISE:
+                    sendMessage(chatId, "Выбирите тип мышц:", createMuscleTypeKeyboard());
                     session.setState(State.CHOOSE_MUSCLE);
                     break;
                 case CHOOSE_MUSCLE:
                     session.setMuscleType(MuscleType.fromRussianName(messageText));
-                    sendMessage(chatId, "Введите упражнение или введите название нового:", createExerciseKeyboard(session.getMuscleType()));
+                    sendMessage(chatId, "Выберите упражнение или введите название нового:",
+                            createExerciseKeyboard(session.getMuscleType()));
                     session.setState(State.ENTER_EXERCISE);
                     break;
                 case ENTER_EXERCISE:
-                    if (isExerciseFromKeyboard(session.getMuscleType(), messageText)) {
-                        database.addExercise(messageText, session.getMuscleType().getTableName());
+                    try {
+                        if (isExerciseFromKeyboard(session.getMuscleType(), messageText)) {
+                            database.addExercise(messageText, session.getMuscleType().getTableName());
+                        }
+                        session.setExercise(messageText);
+                        sendMessage(chatId, "Введите количество повторений и вес (через пробел):");
+                        session.setState(State.ENTER_REPS_AND_WEIGHT);
+                    } catch (SQLException e) {
+                        sendMessage(chatId, "Некорректный ввод. Пожалуйста, введите название упражнения или выберите из имеющихся");
                     }
-                    session.setExercise(messageText);
-                    sendMessage(chatId, "Введите количество повторений:");
-                    session.setState(State.ENTER_REPS);
                     break;
-                case ENTER_REPS:
-                    session.setReps(Integer.parseInt(messageText));
-                    sendMessage(chatId, "Введите вес:");
-                    session.setState(State.ENTER_WEIGHT);
-                    break;
-                case ENTER_WEIGHT:
-                    session.setWeight(Double.parseDouble(messageText));
-                    database.saveWorkout(chatId, session.getExercise(), session.getReps(), session.getWeight());
-                    sendMessage(chatId, "Данные сохранены. Выберите действие:", createActionKeyboard());
-                    session.setState(State.ACTION);
+                case ENTER_REPS_AND_WEIGHT:
+                    try {
+                        String cleanedInput = cleanInput(messageText);
+                        String[] parts = cleanedInput.split(" ");
+                        if (parts.length != 2) {
+                            sendMessage(chatId, "Пожалуйста, введите два числа через пробел (например, '10 80.5').");
+                            return;
+                        }
+                        if (!isNumber(parts[0]) || !isNumber(parts[1])) {
+                            sendMessage(chatId, "Некорректный ввод. Оба значения должны быть числами (например, '10 80.5').");
+                            return;
+                        }
+                        int reps = Integer.parseInt(parts[0]);
+                        double weight = Double.parseDouble(parts[1]);
+                        session.setReps(reps);
+                        session.setWeight(weight);
+                        database.saveWorkout(chatId, session.getExercise(), session.getReps(), session.getWeight());
+                        sendMessage(chatId, "Данные сохранены. Выберите действие:", createActionKeyboard());
+                        session.setState(State.ACTION);
+                    } catch (NumberFormatException e) {
+                        sendMessage(chatId, "Некорректный ввод. Пожалуйста, введите два числа через пробел (например, '10 80.5').");
+                    }
                     break;
                 case ACTION:
                     if (messageText.equals("История")) {
@@ -68,12 +87,24 @@ public class GymBot extends TelegramLongPollingBot {
                     } else if (messageText.equals("Новое упражнение")) {
                         sendMessage(chatId, "Выберите тип мышц:", createMuscleTypeKeyboard());
                         session.setState(State.CHOOSE_MUSCLE);
+                    } else {
+                        sendMessage(chatId, "главная", createActionKeyboard());
                     }
                     break;
             }
-
             userSessions.put(chatId, session);
         }
+    }
+
+    private boolean isNumber(String str) {
+        return str.matches("-?\\d+(\\.\\d+)?");
+    }
+
+    private String cleanInput(String input) {
+        input = input.replace(',', '.');
+        input = input.replaceAll("[^0-9. ]", "");
+        input = input.trim().replaceAll(" +", " ");
+        return input;
     }
 
     private boolean isExerciseFromKeyboard(MuscleType muscleType, String exerciseName) {
@@ -141,7 +172,7 @@ public class GymBot extends TelegramLongPollingBot {
         try {
             execute(message);
         } catch (TelegramApiException e) {
-            e.printStackTrace();
+            System.out.println(e.getMessage());
         }
     }
 

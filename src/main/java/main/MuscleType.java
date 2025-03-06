@@ -5,8 +5,7 @@ public enum MuscleType {
     BACK("Спина", "back"),
     LEGS("Ноги", "legs"),
     ARMS("Руки", "arms"),
-    SHOULDERS("Плечи", "shoulders"),
-    ABS("Пресс", "abs");
+    SHOULDERS("Плечи", "shoulders");
 
     private final String name;
     private final String tableName;

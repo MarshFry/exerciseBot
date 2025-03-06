@@ -2,7 +2,7 @@ package main;
 
 public class UserSession {
 
-    private State state = State.START;
+    private State state = State.ACTION;
     private MuscleType muscleType;
     private String exercise;
     private int reps;
@@ -59,5 +59,5 @@ public class UserSession {
 }
 
 enum State {
-    START, CHOOSE_MUSCLE, ENTER_EXERCISE, ENTER_REPS, ENTER_WEIGHT, ACTION
+    START_EXERCISE, CHOOSE_MUSCLE, ENTER_EXERCISE, ENTER_REPS_AND_WEIGHT, ACTION
 }
