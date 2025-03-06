@@ -1,5 +1,8 @@
 package main;
 
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
+
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -7,19 +10,23 @@ import java.util.List;
 public class Database {
 
     private static final String DB_URL = "jdbc:sqlite:gym_bot.db";
-    private Connection connection;
+    private static HikariDataSource dataSource;
+
+    static {
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(DB_URL);
+        config.setMaximumPoolSize(10);
+        config.setConnectionTimeout(5000);
+        dataSource = new HikariDataSource(config);
+    }
 
     public Database() {
-        try {
-            connection = DriverManager.getConnection(DB_URL);
-            initializeDatabase();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        initializeDatabase();
     }
 
     private void initializeDatabase() {
-        try (Statement statement = connection.createStatement()) {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
             String createExercisesTable = "CREATE TABLE IF NOT EXISTS exercises ("
                     + "id INTEGER PRIMARY KEY AUTOINCREMENT,"
                     + "name TEXT NOT NULL UNIQUE,"
@@ -48,7 +55,8 @@ public class Database {
             return;
         }
         String sql = "INSERT INTO workouts (chat_id, exercise_id, reps, weight) VALUES (?, ?, ?, ?)";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, chatId);
             statement.setInt(2, exerciseId);
             statement.setInt(3, reps);
@@ -61,7 +69,8 @@ public class Database {
 
     private int getExerciseIdByName(String name) {
         String sql = "SELECT id FROM exercises WHERE name = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, name);
             ResultSet resultSet = statement.executeQuery();
             if (resultSet.next()) {
@@ -75,7 +84,8 @@ public class Database {
 
     private String getExerciseNameById(int exerciseId) {
         String sql = "SELECT name FROM exercises WHERE id = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setInt(1, exerciseId);
             ResultSet resultSet = statement.executeQuery();
             if (resultSet.next()) {
@@ -91,15 +101,17 @@ public class Database {
         StringBuilder history = new StringBuilder();
         String sql = "SELECT exercise_id, reps, weight, date FROM workouts WHERE chat_id = ? ORDER BY date DESC";
 
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, chatId);
             ResultSet resultSet = statement.executeQuery();
 
             while (resultSet.next()) {
                 int exerciseId = resultSet.getInt("exercise_id");
                 String exerciseName = getExerciseNameById(exerciseId);
-                if (exerciseName.equals(null)) {
-                    System.out.println("Упражнение не найдено: " + exerciseName);
+                if (exerciseName == null) {
+                    System.out.println("Упражнение не найдено: " + exerciseId);
+                    continue;
                 }
                 int reps = resultSet.getInt("reps");
                 double weight = resultSet.getDouble("weight");
@@ -122,9 +134,11 @@ public class Database {
     public List<String> getExerciseNamesByType(MuscleType muscleType) {
         List<String> exercises = new ArrayList<>();
         String sql = "SELECT name FROM exercises WHERE muscle_type = ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, muscleType.getTableName());
             ResultSet resultSet = statement.executeQuery();
+
             while (resultSet.next()) {
                 String exercise = resultSet.getString("name");
                 exercises.add(exercise);
