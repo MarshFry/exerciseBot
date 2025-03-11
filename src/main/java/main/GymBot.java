@@ -1,11 +1,12 @@
 package main;
 
-import org.sqlite.SQLiteException;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardRemove;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
@@ -52,10 +53,16 @@ public class GymBot extends TelegramLongPollingBot {
                             database.addExercise(messageText, session.getMuscleType().getTableName());
                         }
                         session.setExercise(messageText);
-                        sendMessageAndRemoveKeyboard(chatId, "Введите количество повторений и вес (через пробел):");
                         session.setState(State.ENTER_REPS_AND_WEIGHT);
                     } catch (SQLException e) {
                         sendMessage(chatId, "Некорректный ввод. Пожалуйста, введите название упражнения или выберите из имеющихся");
+                    }
+                    List<String> lastWorkouts = database.getLastWorkoutDataByName(chatId, session.getExercise(), 5);
+                    if (!lastWorkouts.isEmpty()) {
+                        sendMessage(chatId, "Выберите последние значения или введите новые:",
+                                createLastWorkoutsKeyboard(lastWorkouts));
+                    } else {
+                        sendMessageAndRemoveKeyboard(chatId, "Введите количество повторений и вес (через пробел):");
                     }
                     break;
                 case ENTER_REPS_AND_WEIGHT:
@@ -75,26 +82,54 @@ public class GymBot extends TelegramLongPollingBot {
                         session.setReps(reps);
                         session.setWeight(weight);
                         database.saveWorkout(chatId, session.getExercise(), session.getReps(), session.getWeight());
-                        sendMessage(chatId, "Данные сохранены. Выберите действие:", createActionKeyboard());
+                        sendMessage(chatId, "Данные сохранены. Выберите действие:", createActionKeyboard(true));
                         session.setState(State.ACTION);
                     } catch (NumberFormatException e) {
                         sendMessage(chatId, "Некорректный ввод. Пожалуйста, введите два числа через пробел (например, '10 80.5').");
                     }
                     break;
                 case ACTION:
-                    if (messageText.equals("История")) {
-                        String history = database.getWorkoutHistory(chatId);
-                        sendMessage(chatId, "История занятий:\n" + history);
-                    } else if (messageText.equals("Новое упражнение")) {
-                        sendMessage(chatId, "Выберите тип мышц:", createMuscleTypeKeyboard());
-                        session.setState(State.CHOOSE_MUSCLE);
-                    } else {
-                        sendMessage(chatId, "главная", createActionKeyboard());
+                    switch (messageText) {
+                        case "История":
+                            String history = database.getWorkoutHistory(chatId);
+                            sendMessage(chatId, "История занятий:\n" + history);
+                            break;
+                        case "Новое упражнение":
+                            sendMessage(chatId, "Выберите тип мышц:", createMuscleTypeKeyboard());
+                            session.setState(State.CHOOSE_MUSCLE);
+                            break;
+                        case "Добавить подход (повторить предыдущее упражнение)":
+                            lastWorkouts = database.getLastWorkoutDataByName(chatId, session.getExercise(), 5);
+                            if (!lastWorkouts.isEmpty()) {
+                                sendMessage(chatId, "Выберите последние значения или введите новые:",
+                                        createLastWorkoutsKeyboard(lastWorkouts));
+                            } else {
+                                sendMessageAndRemoveKeyboard(chatId, "Введите количество повторений и вес (через пробел):");
+                            }
+                            session.setState(State.ENTER_REPS_AND_WEIGHT);
+                            break;
+                        default:
+                            sendMessage(chatId, "Главная", createActionKeyboard(false));
+                            break;
                     }
                     break;
             }
             userSessions.put(chatId, session);
         }
+    }
+
+    private ReplyKeyboardMarkup createLastWorkoutsKeyboard(List<String> lastWorkouts) {
+        ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
+        List<KeyboardRow> keyboard = new ArrayList<>();
+        KeyboardRow row = new KeyboardRow();
+        for (String workout : lastWorkouts) {
+            String[] element = workout.split(" ");
+            row.add(String.format("Повторений: %s; Вес: %s", element[0], element[1]));
+            keyboard.add(row);
+            row = new KeyboardRow();
+        }
+        keyboardMarkup.setKeyboard(keyboard);
+        return keyboardMarkup;
     }
 
     private boolean isNumber(String str) {
@@ -154,10 +189,15 @@ public class GymBot extends TelegramLongPollingBot {
         return keyboardMarkup;
     }
 
-    private ReplyKeyboardMarkup createActionKeyboard() {
+    private ReplyKeyboardMarkup createActionKeyboard(boolean isAfterSave) {
         ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
         List<KeyboardRow> keyboard = new ArrayList<>();
         KeyboardRow row = new KeyboardRow();
+        if (isAfterSave) {
+            row.add("Добавить подход (повторить предыдущее упражнение)");
+            keyboard.add(row);
+            row = new KeyboardRow();
+        }
         row.add("История");
         row.add("Новое упражнение");
         keyboard.add(row);
@@ -166,6 +206,18 @@ public class GymBot extends TelegramLongPollingBot {
     }
 
     private void sendMessage(long chatId, String text, ReplyKeyboardMarkup keyboardMarkup) {
+        SendMessage message = new SendMessage();
+        message.setChatId(String.valueOf(chatId));
+        message.setText(text);
+        message.setReplyMarkup(keyboardMarkup);
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+
+    private void sendMessageInline(long chatId, String text, InlineKeyboardMarkup keyboardMarkup) {
         SendMessage message = new SendMessage();
         message.setChatId(String.valueOf(chatId));
         message.setText(text);

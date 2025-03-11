@@ -10,7 +10,7 @@ import java.util.List;
 public class Database {
 
     private static final String DB_URL = "jdbc:sqlite:gym_bot.db";
-    private static HikariDataSource dataSource;
+    private static final HikariDataSource dataSource;
 
     static {
         HikariConfig config = new HikariConfig();
@@ -54,7 +54,9 @@ public class Database {
             System.out.println("Упражнение не найдено: " + exerciseName);
             return;
         }
-        String sql = "INSERT INTO workouts (chat_id, exercise_id, reps, weight) VALUES (?, ?, ?, ?)";
+        String sql = "INSERT INTO workouts " +
+                "(chat_id, exercise_id, reps, weight)" +
+                " VALUES (?, ?, ?, ?)";
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setLong(1, chatId);
@@ -65,6 +67,36 @@ public class Database {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+    }
+
+    public List<String> getLastWorkoutDataByName(long chatId, String exerciseName, int sizeOfList) {
+        List<String> workoutDatas = new ArrayList<>();
+        int exerciseId = getExerciseIdByName(exerciseName);
+        if (exerciseId == -1) {
+            System.out.println("Упражнение не найдено: " + exerciseName);
+            return workoutDatas;
+        }
+        String sql = "SELECT DISTINCT reps, weight " +
+                "FROM workouts " +
+                "WHERE chat_id = ? AND exercise_id = ? " +
+                "ORDER BY date DESC " +
+                "LIMIT ?";
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, chatId);
+            statement.setInt(2, exerciseId);
+            statement.setInt(3, sizeOfList);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    int reps = resultSet.getInt("reps");
+                    double weight = resultSet.getDouble("weight");
+                    workoutDatas.add(reps + " " + weight);
+                }
+            }
+        } catch (SQLException e) {
+            System.out.println("Ошибка при выполнении SQL-запроса: " + e.getMessage());
+        }
+        return workoutDatas;
     }
 
     private int getExerciseIdByName(String name) {
@@ -99,7 +131,10 @@ public class Database {
 
     public String getWorkoutHistory(long chatId) {
         StringBuilder history = new StringBuilder();
-        String sql = "SELECT exercise_id, reps, weight, date FROM workouts WHERE chat_id = ? ORDER BY date DESC";
+        String sql = "SELECT exercise_id, reps, weight, date " +
+                "FROM workouts " +
+                "WHERE chat_id = ? " +
+                "ORDER BY date DESC";
 
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
