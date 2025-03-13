@@ -7,7 +7,7 @@ public class UserSession {
     private String exercise;
     private int reps;
     private double weight;
-    private StringBuilder history = new StringBuilder();
+    private final StringBuilder history = new StringBuilder();
 
     public State getState() {
         return state;
@@ -56,8 +56,4 @@ public class UserSession {
     public void addToHistory(String entry) {
         history.append(entry).append("\n");
     }
-}
-
-enum State {
-    START_EXERCISE, CHOOSE_MUSCLE, ENTER_EXERCISE, ENTER_REPS_AND_WEIGHT, ACTION
 }
