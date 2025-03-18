@@ -29,7 +29,7 @@ public class GymBot extends TelegramLongPollingBot {
             String messageText = update.getMessage().getText();
             UserSession session = userSessions.getOrDefault(chatId, new UserSession());
 
-            if (messageText.equals("/start")) {
+            if (messageText.equals("/start") || messageText.equals("Назад")) {
                 userSessions.remove(chatId);
                 session = new UserSession();
                 session.setState(State.ACTION);
@@ -57,7 +57,7 @@ public class GymBot extends TelegramLongPollingBot {
                     } catch (SQLException e) {
                         sendMessage(chatId, "Некорректный ввод. Пожалуйста, введите название упражнения или выберите из имеющихся");
                     }
-                    lastWorkouts = database.getLastWorkoutDataByName(chatId, session.getExercise(), 5);
+                    lastWorkouts = database.getLastWorkoutDataByName(session.getExercise(), 5);
                     if (!lastWorkouts.isEmpty()) {
                         sendMessage(chatId, "Выберите последние значения или введите новые:",
                                 createLastWorkoutsKeyboard(lastWorkouts));
@@ -91,7 +91,7 @@ public class GymBot extends TelegramLongPollingBot {
                 case ACTION:
                     switch (messageText) {
                         case "История":
-                            String history = database.getWorkoutHistory(chatId);
+                            String history = database.getWorkoutHistory();
                             sendMessage(chatId, "История занятий:\n" + history);
                             break;
                         case "Новое упражнение":
@@ -99,7 +99,7 @@ public class GymBot extends TelegramLongPollingBot {
                             session.setState(State.CHOOSE_MUSCLE);
                             break;
                         case "Добавить подход (повторить предыдущее упражнение)":
-                            lastWorkouts = database.getLastWorkoutDataByName(chatId, session.getExercise(), 5);
+                            lastWorkouts = database.getLastWorkoutDataByName(session.getExercise(), 5);
                             if (!lastWorkouts.isEmpty()) {
                                 sendMessage(chatId, "Выберите последние значения или введите новые:",
                                         createLastWorkoutsKeyboard(lastWorkouts));
@@ -162,6 +162,7 @@ public class GymBot extends TelegramLongPollingBot {
         if (!row.isEmpty()) {
             keyboard.add(row);
         }
+        keyboard.add(addPreviousStateBtn());
         keyboardMarkup.setKeyboard(keyboard);
         return keyboardMarkup;
     }
@@ -185,6 +186,7 @@ public class GymBot extends TelegramLongPollingBot {
         if (!row.isEmpty()) {
             keyboard.add(row);
         }
+        keyboard.add(addPreviousStateBtn());
         keyboardMarkup.setKeyboard(keyboard);
         return keyboardMarkup;
     }
@@ -217,18 +219,6 @@ public class GymBot extends TelegramLongPollingBot {
         }
     }
 
-    private void sendMessageInline(long chatId, String text, InlineKeyboardMarkup keyboardMarkup) {
-        SendMessage message = new SendMessage();
-        message.setChatId(String.valueOf(chatId));
-        message.setText(text);
-        message.setReplyMarkup(keyboardMarkup);
-        try {
-            execute(message);
-        } catch (TelegramApiException e) {
-            System.out.println(e.getMessage());
-        }
-    }
-
     private void sendMessage(long chatId, String text) {
         sendMessage(chatId, text, null);
     }
@@ -246,6 +236,12 @@ public class GymBot extends TelegramLongPollingBot {
         } catch (TelegramApiException e) {
             System.out.println(e.getMessage());
         }
+    }
+
+    private KeyboardRow addPreviousStateBtn() {
+        KeyboardRow backRow = new KeyboardRow();
+        backRow.add("Назад");
+        return backRow;
     }
 
     @Override
