@@ -69,7 +69,7 @@ public class Database {
         }
     }
 
-    public List<String> getLastWorkoutDataByName(long chatId, String exerciseName, int sizeOfList) {
+    public List<String> getLastWorkoutDataByName(String exerciseName, int sizeOfList) {
         List<String> workoutDatas = new ArrayList<>();
         int exerciseId = getExerciseIdByName(exerciseName);
         if (exerciseId == -1) {
@@ -78,14 +78,13 @@ public class Database {
         }
         String sql = "SELECT DISTINCT reps, weight " +
                 "FROM workouts " +
-                "WHERE chat_id = ? AND exercise_id = ? " +
+                "WHERE exercise_id = ? " +
                 "ORDER BY date DESC " +
                 "LIMIT ?";
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, chatId);
-            statement.setInt(2, exerciseId);
-            statement.setInt(3, sizeOfList);
+            statement.setInt(1, exerciseId);
+            statement.setInt(2, sizeOfList);
             try (ResultSet resultSet = statement.executeQuery()) {
                 while (resultSet.next()) {
                     int reps = resultSet.getInt("reps");
@@ -129,16 +128,14 @@ public class Database {
         return null;
     }
 
-    public String getWorkoutHistory(long chatId) {
+    public String getWorkoutHistory() {
         StringBuilder history = new StringBuilder();
         String sql = "SELECT exercise_id, reps, weight, date " +
                 "FROM workouts " +
-                "WHERE chat_id = ? " +
                 "ORDER BY date DESC";
 
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setLong(1, chatId);
             ResultSet resultSet = statement.executeQuery();
 
             while (resultSet.next()) {
