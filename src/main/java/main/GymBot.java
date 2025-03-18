@@ -3,12 +3,11 @@ package main;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardRemove;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
-import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -21,6 +20,7 @@ public class GymBot extends TelegramLongPollingBot {
     private final Map<Long, UserSession> userSessions = new HashMap<>();
     private final Database database = new Database();
     EnvListener envListener = new EnvListener();
+    List<String> lastWorkouts = new ArrayList<>();
 
     @Override
     public void onUpdateReceived(Update update) {
@@ -57,7 +57,7 @@ public class GymBot extends TelegramLongPollingBot {
                     } catch (SQLException e) {
                         sendMessage(chatId, "Некорректный ввод. Пожалуйста, введите название упражнения или выберите из имеющихся");
                     }
-                    List<String> lastWorkouts = database.getLastWorkoutDataByName(chatId, session.getExercise(), 5);
+                    lastWorkouts = database.getLastWorkoutDataByName(chatId, session.getExercise(), 5);
                     if (!lastWorkouts.isEmpty()) {
                         sendMessage(chatId, "Выберите последние значения или введите новые:",
                                 createLastWorkoutsKeyboard(lastWorkouts));
@@ -73,7 +73,7 @@ public class GymBot extends TelegramLongPollingBot {
                             sendMessage(chatId, "Пожалуйста, введите два числа через пробел (например, '10 80.5').");
                             return;
                         }
-                        if (!isNumber(parts[0]) || !isNumber(parts[1])) {
+                        if (isNotNumber(parts[0]) || isNotNumber(parts[1])) {
                             sendMessage(chatId, "Некорректный ввод. Оба значения должны быть числами (например, '10 80.5').");
                             return;
                         }
@@ -132,8 +132,8 @@ public class GymBot extends TelegramLongPollingBot {
         return keyboardMarkup;
     }
 
-    private boolean isNumber(String str) {
-        return str.matches("-?\\d+(\\.\\d+)?");
+    private boolean isNotNumber(String str) {
+        return !str.matches("-?\\d+(\\.\\d+)?");
     }
 
     private String cleanInput(String input) {
