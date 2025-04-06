@@ -4,7 +4,8 @@ public enum MuscleType {
     CHEST("Грудь", "chest"),
     BACK("Спина", "back"),
     LEGS("Ноги", "legs"),
-    ARMS("Руки", "arms"),
+    BICEPS("Бицепс", "biceps"),
+    TRICEPS("Трицепс", "triceps"),
     SHOULDERS("Плечи", "shoulders");
 
     private final String name;

@@ -4,7 +4,6 @@ import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
-import org.telegram.telegrambots.meta.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardRemove;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
@@ -21,6 +20,7 @@ public class GymBot extends TelegramLongPollingBot {
     private final Database database = new Database();
     EnvListener envListener = new EnvListener();
     List<String> lastWorkouts = new ArrayList<>();
+    private final Map<Long, Integer> historyOffsets = new HashMap<>();
 
     @Override
     public void onUpdateReceived(Update update) {
@@ -54,15 +54,17 @@ public class GymBot extends TelegramLongPollingBot {
                         }
                         session.setExercise(messageText);
                         session.setState(State.ENTER_REPS_AND_WEIGHT);
+                        String exerciseHistory = database.getExerciseHistory(messageText, 5);
+                        sendHtmlMessage(chatId, "История по упражнению: " + messageText + "\n" + exerciseHistory, null);
+                        lastWorkouts = database.getLastWorkoutDataByName(session.getExercise(), 5);
+                        if (!lastWorkouts.isEmpty()) {
+                            sendMessage(chatId, "Выберите последние значения или введите новые:",
+                                    createLastWorkoutsKeyboard(lastWorkouts));
+                        } else {
+                            sendMessageAndRemoveKeyboard(chatId, "Введите вес и количество повторений (через пробел):");
+                        }
                     } catch (SQLException e) {
                         sendMessage(chatId, "Некорректный ввод. Пожалуйста, введите название упражнения или выберите из имеющихся");
-                    }
-                    lastWorkouts = database.getLastWorkoutDataByName(session.getExercise(), 5);
-                    if (!lastWorkouts.isEmpty()) {
-                        sendMessage(chatId, "Выберите последние значения или введите новые:",
-                                createLastWorkoutsKeyboard(lastWorkouts));
-                    } else {
-                        sendMessageAndRemoveKeyboard(chatId, "Введите количество повторений и вес (через пробел):");
                     }
                     break;
                 case ENTER_REPS_AND_WEIGHT:
@@ -70,35 +72,47 @@ public class GymBot extends TelegramLongPollingBot {
                         String cleanedInput = cleanInput(messageText);
                         String[] parts = cleanedInput.split(" ");
                         if (parts.length != 2) {
-                            sendMessage(chatId, "Пожалуйста, введите два числа через пробел (например, '10 80.5').");
+                            sendMessage(chatId, "Пожалуйста, введите два числа через пробел (например, '80.5 10').");
                             return;
                         }
                         if (isNotNumber(parts[0]) || isNotNumber(parts[1])) {
-                            sendMessage(chatId, "Некорректный ввод. Оба значения должны быть числами (например, '10 80.5').");
+                            sendMessage(chatId, "Некорректный ввод. Оба значения должны быть числами (например, '80.5 10').");
                             return;
                         }
-                        int reps = Integer.parseInt(parts[0]);
-                        double weight = Double.parseDouble(parts[1]);
-                        session.setReps(reps);
+                        double weight = Double.parseDouble(parts[0]);
+                        int reps = Integer.parseInt(parts[1]);
                         session.setWeight(weight);
+                        session.setReps(reps);
                         database.saveWorkout(chatId, session.getExercise(), session.getReps(), session.getWeight());
                         sendMessage(chatId, "Данные сохранены. Выберите действие:", createActionKeyboard(true));
                         session.setState(State.ACTION);
                     } catch (NumberFormatException e) {
-                        sendMessage(chatId, "Некорректный ввод. Пожалуйста, введите два числа через пробел (например, '10 80.5').");
+                        sendMessage(chatId, "Некорректный ввод. Пожалуйста, введите два числа через пробел (например, '80.5 10').");
                     }
                     break;
                 case ACTION:
                     switch (messageText) {
                         case "История":
-                            String history = database.getWorkoutHistory();
-                            sendMessage(chatId, "История занятий:\n" + history);
+                        case "Показать ещё":
+                            int currentOffset = messageText.equals("История") ? 0 : historyOffsets.getOrDefault(chatId, 0) + 3;
+                            historyOffsets.put(chatId, currentOffset);
+                            String historyText = database.getWorkoutHistoryText(currentOffset);
+                            boolean hasMore = database.hasMoreWorkouts(currentOffset);
+                            ReplyKeyboardMarkup keyboard = createActionKeyboard(
+                                    session.getExercise() != null,
+                                    hasMore
+                            );
+                            sendHtmlMessage(chatId, historyText, keyboard);
                             break;
+
                         case "Новое упражнение":
                             sendMessage(chatId, "Выберите тип мышц:", createMuscleTypeKeyboard());
                             session.setState(State.CHOOSE_MUSCLE);
                             break;
+
                         case "Добавить подход (повторить предыдущее упражнение)":
+                            String exerciseHistory = database.getExerciseHistory(session.getExercise(), 5);
+                            sendHtmlMessage(chatId, "История по упражнению: " + session.getExercise() + "\n" + exerciseHistory, null);
                             lastWorkouts = database.getLastWorkoutDataByName(session.getExercise(), 5);
                             if (!lastWorkouts.isEmpty()) {
                                 sendMessage(chatId, "Выберите последние значения или введите новые:",
@@ -108,8 +122,9 @@ public class GymBot extends TelegramLongPollingBot {
                             }
                             session.setState(State.ENTER_REPS_AND_WEIGHT);
                             break;
+
                         default:
-                            sendMessage(chatId, "Главная", createActionKeyboard(false));
+                            sendMessage(chatId, "Главная", createActionKeyboard(false, false));
                             break;
                     }
                     break;
@@ -124,7 +139,7 @@ public class GymBot extends TelegramLongPollingBot {
         KeyboardRow row = new KeyboardRow();
         for (String workout : lastWorkouts) {
             String[] element = workout.split(" ");
-            row.add(String.format("Повторений: %s; Вес: %s", element[0], element[1]));
+            row.add(String.format("Вес: %s; Повторений: %s", element[0], element[1]));
             keyboard.add(row);
             row = new KeyboardRow();
         }
@@ -175,7 +190,7 @@ public class GymBot extends TelegramLongPollingBot {
         if (!exercises.isEmpty()) {
             for (String exercise : exercises) {
                 row.add(exercise);
-                if (row.size() >= 3) {
+                if (row.size() >= 2) {
                    keyboard.add(row);
                  row = new KeyboardRow();
                 }
@@ -191,7 +206,7 @@ public class GymBot extends TelegramLongPollingBot {
         return keyboardMarkup;
     }
 
-    private ReplyKeyboardMarkup createActionKeyboard(boolean isAfterSave) {
+    private ReplyKeyboardMarkup createActionKeyboard(boolean isAfterSave, boolean showMoreInsteadHistory) {
         ReplyKeyboardMarkup keyboardMarkup = new ReplyKeyboardMarkup();
         List<KeyboardRow> keyboard = new ArrayList<>();
         KeyboardRow row = new KeyboardRow();
@@ -200,11 +215,16 @@ public class GymBot extends TelegramLongPollingBot {
             keyboard.add(row);
             row = new KeyboardRow();
         }
-        row.add("История");
+        row.add(showMoreInsteadHistory ? "Показать ещё" : "История");
         row.add("Новое упражнение");
         keyboard.add(row);
+
         keyboardMarkup.setKeyboard(keyboard);
         return keyboardMarkup;
+    }
+
+    private ReplyKeyboardMarkup createActionKeyboard(boolean isAfterSave) {
+        return createActionKeyboard(isAfterSave, false);
     }
 
     private void sendMessage(long chatId, String text, ReplyKeyboardMarkup keyboardMarkup) {
@@ -235,6 +255,21 @@ public class GymBot extends TelegramLongPollingBot {
             execute(message);
         } catch (TelegramApiException e) {
             System.out.println(e.getMessage());
+        }
+    }
+
+    private void sendHtmlMessage(long chatId, String text, ReplyKeyboardMarkup keyboard) {
+        SendMessage message = new SendMessage();
+        message.setChatId(chatId);
+        message.setText(text);
+        message.setParseMode("HTML");
+        if (keyboard != null) {
+            message.setReplyMarkup(keyboard);
+        }
+        try {
+            execute(message);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
         }
     }
 
