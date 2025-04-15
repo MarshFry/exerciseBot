@@ -113,7 +113,7 @@ public class GymBot extends TelegramLongPollingBot {
                         case "Добавить подход (повторить предыдущее упражнение)":
                             String exerciseHistory = database.getExerciseHistory(session.getExercise(), 5);
                             sendHtmlMessage(chatId, "История по упражнению: " + session.getExercise() + "\n" + exerciseHistory, null);
-                            lastWorkouts = database.getLastWorkoutDataByName(session.getExercise(), 5);
+                            lastWorkouts = database.getLastWorkoutDataByName(session.getExercise(), 5) ;
                             if (!lastWorkouts.isEmpty()) {
                                 sendMessage(chatId, "Выберите последние значения или введите новые:",
                                         createLastWorkoutsKeyboard(lastWorkouts));

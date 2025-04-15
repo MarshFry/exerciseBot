@@ -123,13 +123,13 @@ public class Database {
             Map<String, List<String>> workoutsByDate = new LinkedHashMap<>();
 
             while (rs.next()) {
-                int reps = rs.getInt("reps");
                 double weight = rs.getDouble("weight");
+                int reps = rs.getInt("reps");
                 String fullDate = rs.getString("date");
                 String dateOnly = fullDate.split(" ")[0];
 
                 workoutsByDate.computeIfAbsent(dateOnly, k -> new ArrayList<>())
-                        .add(0, String.format("Повторения: %d, Вес: %.1f", reps, weight));
+                        .add(0, String.format("Вес: %.1f, Повторения: %d" , weight, reps));
             }
             int workoutNum = 1;
             for (Map.Entry<String, List<String>> entry : workoutsByDate.entrySet()) {
@@ -236,7 +236,7 @@ public class Database {
                         if (!exercises.containsKey(exerciseName)) {
                             exercises.put(exerciseName, new ArrayList<>());
                         }
-                        exercises.get(exerciseName).add(0, String.format("Повторения: %d, Вес: %.1f", reps, weight));
+                        exercises.get(exerciseName).add(0, String.format("Вес: %.1f, Повторения: %d", weight, reps));
                     }
 
                     SimpleDateFormat fromDB = new SimpleDateFormat("yyyy-MM-dd");
